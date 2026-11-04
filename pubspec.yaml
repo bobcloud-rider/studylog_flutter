@@ -1,5 +1,5 @@
 name: studylog_flutter
-description: "StudyLog - Aplikasi Catatan Perkuliahan (Milestone 1: Form Interaktif)."
+description: "StudyLog - Aplikasi Catatan Perkuliahan (Milestone 3: SQLite CRUD)."
 publish_to: "none"
 version: 1.0.0+1
 
@@ -9,6 +9,9 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  provider: ^6.1.2
+  sqflite: ^2.3.0
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
