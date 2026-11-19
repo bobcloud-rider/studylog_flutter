@@ -1,13 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  AndroidManifest.xml — StudyLog (Kelompok 1 IFB5A)
+
+  Perbedaan dari file asli Anda hanya EMPAT hal:
+    1. Empat baris <uses-permission> (INTERNET, NETWORK_STATE, FINE_LOCATION, COARSE_LOCATION)
+    2. Atribut android:usesCleartextTraffic="true" pada <application>
+    3. Satu <intent> IMAGE_CAPTURE di dalam <queries> (untuk kamera di Android 11+)
+    4. android:label diubah dari "studylog_flutter" menjadi "StudyLog"
+       (kalau tidak mau berubah, kembalikan ke "studylog_flutter")
+
+  Selain itu isinya identik dengan file asli Anda: activity, meta-data,
+  komentar, dan <queries> PROCESS_TEXT tidak diubah.
+-->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- ================= IZIN ================= -->
+
+    <!-- Mengirim laporan ke backend demo. Wajib untuk build release:
+         pada build debug izin ini otomatis ditambahkan Flutter, tetapi
+         TIDAK pada release. -->
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Memeriksa apakah HP sedang online sebelum mengirim (status
+         PENDING / SENDING / FAILED). -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Lokasi aduan (fitur P3). Tanpa dua baris ini, geolocator melempar:
+         "No location permissions are defined in the manifest" -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
+    <!-- Tidak perlu android.permission.CAMERA: image_picker memakai aplikasi
+         kamera bawaan Android lewat intent, bukan kamera langsung. -->
+    <!-- Tidak perlu ACCESS_BACKGROUND_LOCATION: lokasi hanya diambil saat
+         aplikasi dibuka (while in use). -->
+
     <application
-        android:usesCleartextTraffic="true"
-        android:label="studylog_flutter"
+        android:label="StudyLog"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
+        <!-- usesCleartextTraffic hanya untuk praktikum, karena backend demo
+             masih http://. Untuk produksi pakai https:// lalu hapus atribut
+             ini. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -22,9 +57,9 @@
                  while the Flutter UI initializes. After that, this theme continues
                  to determine the Window background behind the Flutter UI. -->
             <meta-data
-              android:name="io.flutter.embedding.android.NormalTheme"
-              android:resource="@style/NormalTheme"
-              />
+                android:name="io.flutter.embedding.android.NormalTheme"
+                android:resource="@style/NormalTheme"
+                />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
@@ -45,6 +80,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- Ditambahkan: supaya Android 11+ mengizinkan aplikasi mencari
+             aplikasi kamera bawaan saat tombol "Ambil Foto" ditekan. -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE"/>
         </intent>
     </queries>
 </manifest>

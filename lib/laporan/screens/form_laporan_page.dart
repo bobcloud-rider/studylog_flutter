@@ -1,3 +1,4 @@
+import "dart:async";
 import "dart:io";
 
 import "package:flutter/material.dart";
@@ -68,46 +69,90 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
 
   /// P3: lokasi opsional. Bila izin ditolak / GPS mati -> koordinat null,
   /// dan laporan TETAP dapat disimpan.
+  ///
+  /// Syarat mutlak: `ACCESS_FINE_LOCATION` dan `ACCESS_COARSE_LOCATION` harus
+  /// ada di android/app/src/main/AndroidManifest.xml. Tanpa itu geolocator
+  /// melempar: "No location permissions are defined in the manifest".
   Future<void> _ambilLokasi() async {
+    if (_mengambilLokasi) return;
     setState(() => _mengambilLokasi = true);
     try {
       final layananAktif = await Geolocator.isLocationServiceEnabled();
       if (!layananAktif) {
         if (!mounted) return;
         setState(() {
-          _infoLokasi = "GPS mati. Laporan tetap bisa disimpan tanpa lokasi.";
+          _infoLokasi =
+          "GPS mati. Nyalakan lokasi di HP, atau simpan laporan tanpa koordinat.";
           _latitude = null;
           _longitude = null;
         });
         return;
       }
+
       var izin = await Geolocator.checkPermission();
       if (izin == LocationPermission.denied) {
         izin = await Geolocator.requestPermission();
       }
-      if (izin == LocationPermission.denied ||
-          izin == LocationPermission.deniedForever) {
+
+      if (izin == LocationPermission.denied) {
         if (!mounted) return;
         setState(() {
           _infoLokasi =
-              "Izin lokasi ditolak. Laporan tetap disimpan tanpa koordinat.";
+          "Izin lokasi ditolak. Laporan tetap bisa disimpan tanpa koordinat.";
           _latitude = null;
           _longitude = null;
         });
         return;
       }
-      final posisi = await Geolocator.getCurrentPosition();
+
+      if (izin == LocationPermission.deniedForever) {
+        if (!mounted) return;
+        setState(() {
+          _infoLokasi =
+          "Izin lokasi diblokir permanen. Buka Pengaturan > Aplikasi > StudyLog > Izin > Lokasi.";
+          _latitude = null;
+          _longitude = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text("Izin lokasi diblokir. Buka pengaturan aplikasi?"),
+            action: SnackBarAction(
+              label: "Buka Pengaturan",
+              onPressed: () => Geolocator.openAppSettings(),
+            ),
+          ),
+        );
+        return;
+      }
+
+      final posisi = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
+        ),
+      );
       if (!mounted) return;
       setState(() {
         _latitude = posisi.latitude;
         _longitude = posisi.longitude;
+        _infoLokasi = "Lokasi tersimpan: "
+            "${posisi.latitude.toStringAsFixed(5)}, ${posisi.longitude.toStringAsFixed(5)}";
+      });
+    } on TimeoutException {
+      if (!mounted) return;
+      setState(() {
         _infoLokasi =
-            "Lokasi: ${posisi.latitude.toStringAsFixed(5)}, ${posisi.longitude.toStringAsFixed(5)}";
+        "Lokasi tidak didapat dalam 20 detik (sinyal GPS lemah). Laporan tetap bisa disimpan.";
+        _latitude = null;
+        _longitude = null;
       });
     } catch (e) {
       if (!mounted) return;
+      final pesan = e.toString();
       setState(() {
-        _infoLokasi = "Gagal mengambil lokasi ($e). Laporan tetap bisa disimpan.";
+        _infoLokasi = pesan.contains("No location permissions")
+            ? "Izin lokasi belum ada di AndroidManifest.xml. Laporan tetap bisa disimpan."
+            : "Gagal mengambil lokasi ($e). Laporan tetap bisa disimpan.";
         _latitude = null;
         _longitude = null;
       });
@@ -127,7 +172,7 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
     setState(() => _menyimpan = true);
     try {
       final laporan = Laporan(
-        localId: const Uuid().v4(),
+        localId: Uuid().v4(),
         judul: _judul.text.trim(),
         kategori: _kategori!.trim(),
         deskripsi: _deskripsi.text.trim(),
@@ -174,7 +219,7 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
                 children: [
                   const Text("Data Kerusakan",
                       style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 14),
                   TextFormField(
                     controller: _judul,
@@ -195,7 +240,7 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
                       prefixIcon: Icon(Icons.category_outlined),
                     ),
                     validator: (v) =>
-                        (v == null || v.trim().isEmpty) ? "Kategori wajib dipilih" : null,
+                    (v == null || v.trim().isEmpty) ? "Kategori wajib dipilih" : null,
                     items: kKategori
                         .map((k) => DropdownMenuItem(value: k, child: Text(k)))
                         .toList(),
@@ -242,7 +287,7 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
                 children: [
                   const Text("Foto & Lokasi (opsional)",
                       style:
-                          TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                      TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 10),
                   if (_photoPath != null)
                     ClipRRect(
@@ -276,13 +321,13 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
                       Expanded(
                         child: OutlinedButton.icon(
                           onPressed:
-                              _mengambilLokasi ? null : _ambilLokasi,
+                          _mengambilLokasi ? null : _ambilLokasi,
                           icon: _mengambilLokasi
                               ? const SizedBox(
-                                  width: 14,
-                                  height: 14,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
+                              width: 14,
+                              height: 14,
+                              child:
+                              CircularProgressIndicator(strokeWidth: 2))
                               : const Icon(Icons.my_location, size: 18),
                           label: const Text("Ambil Lokasi"),
                         ),
@@ -316,12 +361,12 @@ class _FormLaporanPageState extends State<FormLaporanPage> {
   }
 
   Widget _kotak({required Widget child}) => Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFDCE5E5)),
-        ),
-        child: child,
-      );
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: const Color(0xFFDCE5E5)),
+    ),
+    child: child,
+  );
 }
