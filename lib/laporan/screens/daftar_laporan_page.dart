@@ -1,8 +1,10 @@
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:provider/provider.dart";
 
 import "../models/laporan.dart";
 import "../utils/konstanta.dart";
+import "../utils/ringkasan_laporan.dart";
 import "../utils/widget_umum.dart";
 import "../viewmodels/laporan_view_model.dart";
 import "detail_laporan_page.dart";
@@ -19,8 +21,26 @@ class DaftarLaporanPage extends StatelessWidget {
         title: const Text("Campus Report"),
         backgroundColor: kWarnaUtama,
         foregroundColor: Colors.white,
-        actions: const [
-          Padding(
+        actions: [
+          // US-05: salin ringkasan SEMUA aduan yang sedang tampil
+          IconButton(
+            tooltip: "Salin ringkasan semua aduan",
+            icon: const Icon(Icons.copy_all_outlined),
+            onPressed: () async {
+              final daftar = context.read<LaporanViewModel>().laporan;
+              if (daftar.isEmpty) {
+                tampilkanSnack(context, "Belum ada aduan untuk disalin.");
+                return;
+              }
+              await Clipboard.setData(
+                ClipboardData(text: ringkasanBanyakLaporan(daftar)),
+              );
+              if (!context.mounted) return;
+              tampilkanSnack(
+                  context, "Ringkasan ${daftar.length} aduan disalin.");
+            },
+          ),
+          const Padding(
             padding: EdgeInsets.only(right: 12),
             child: Center(child: _RingkasanTotal()),
           ),

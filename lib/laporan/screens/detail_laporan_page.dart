@@ -1,10 +1,12 @@
 import "dart:io";
 
 import "package:flutter/material.dart";
+import "package:flutter/services.dart";
 import "package:provider/provider.dart";
 
 import "../models/laporan.dart";
 import "../utils/konstanta.dart";
+import "../utils/ringkasan_laporan.dart";
 import "../utils/widget_umum.dart";
 import "../viewmodels/laporan_view_model.dart";
 
@@ -50,6 +52,18 @@ class DetailLaporanPage extends StatelessWidget {
                         laporan.status == StatusKirim.sending
                     ? null
                     : () => vm.kirimLaporan(laporan.localId),
+              ),
+              const SizedBox(height: 10),
+              // US-05: salin ringkasan aduan ke papan klip
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  side: BorderSide(color: kWarnaUtama.withValues(alpha: 0.5)),
+                  foregroundColor: kWarnaUtama,
+                ),
+                onPressed: () => _salinRingkasan(context, laporan),
+                icon: const Icon(Icons.copy_all_outlined),
+                label: const Text("Salin Ringkasan"),
               ),
               const SizedBox(height: 10),
               OutlinedButton.icon(
@@ -212,6 +226,17 @@ class DetailLaporanPage extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// US-05: menyalin ringkasan satu aduan. Isi teks disusun di
+  /// `utils/ringkasan_laporan.dart` (fungsi murni, sudah diuji).
+  Future<void> _salinRingkasan(BuildContext context, Laporan laporan) async {
+    await Clipboard.setData(
+      ClipboardData(text: ringkasanUntukClipboard(laporan)),
+    );
+    if (!context.mounted) return;
+    tampilkanSnack(
+        context, "Ringkasan aduan disalin. Tempel di WhatsApp atau catatan.");
   }
 
   Future<void> _konfirmasiHapus(

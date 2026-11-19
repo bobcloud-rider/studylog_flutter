@@ -29,12 +29,73 @@ List<MapEntry<String, List<Catatan>>> kelompokByMK(
   // Catatan dengan nama MK di luar daftar tetap ditampilkan
   final lainnya = semua
       .where((c) => semuaMataKuliah
-      .every((mk) => mk.nama.toLowerCase() != c.mataKuliah.toLowerCase()))
+          .every((mk) => mk.nama.toLowerCase() != c.mataKuliah.toLowerCase()))
       .toList();
   if (filter == null && lainnya.isNotEmpty) {
     hasil.add(MapEntry("Lainnya", lainnya));
   }
   return hasil;
+}
+
+/// US-05 — pilihan urutan daftar catatan.
+const List<String> pilihanUrutan = [
+  "Terbaru",
+  "Terlama",
+  "Judul A–Z",
+  "Judul Z–A",
+];
+
+/// Mengurutkan catatan sesuai mode yang dipilih.
+///
+/// - "Terbaru"  : tanggal terbesar dulu (default)
+/// - "Terlama"  : tanggal terkecil dulu
+/// - "Judul A–Z": abjad menaik, tidak peka huruf besar/kecil
+/// - "Judul Z–A": abjad menurun
+///
+/// Bila tanggalnya sama, urutan dirapikan dengan judul supaya hasilnya
+/// selalu konsisten (tidak berubah-ubah antar pemanggilan).
+List<Catatan> urutkanCatatan(List<Catatan> data, String mode) {
+  final hasil = List<Catatan>.from(data);
+
+  int abjad(Catatan a, Catatan b) =>
+      a.judul.toLowerCase().compareTo(b.judul.toLowerCase());
+
+  switch (mode) {
+    case "Terlama":
+      hasil.sort((a, b) {
+        final t = a.tanggal.compareTo(b.tanggal);
+        return t != 0 ? t : abjad(a, b);
+      });
+      break;
+    case "Judul A–Z":
+      hasil.sort(abjad);
+      break;
+    case "Judul Z–A":
+      hasil.sort((a, b) => abjad(b, a));
+      break;
+    case "Terbaru":
+    default:
+      hasil.sort((a, b) {
+        final t = b.tanggal.compareTo(a.tanggal);
+        return t != 0 ? t : abjad(a, b);
+      });
+  }
+  return hasil;
+}
+
+/// US-03 — pencarian berdasarkan JUDUL.
+///
+/// Aturan:
+/// - tidak peka huruf besar/kecil (semua dibandingkan dalam lowercase)
+/// - spasi di awal/akhir diabaikan
+/// - kata kunci kosong = semua catatan dikembalikan
+/// - hanya mencocokkan `judul`, bukan `isi` (sesuai user story)
+List<Catatan> cariCatatanByJudul(List<Catatan> semua, String kataKunci) {
+  final kunci = kataKunci.trim().toLowerCase();
+  if (kunci.isEmpty) return List<Catatan>.from(semua);
+  return semua
+      .where((c) => c.judul.toLowerCase().contains(kunci))
+      .toList();
 }
 
 /// M2 - tugas pengayaan: jumlah TOTAL catatan, dihitung lewat Consumer
@@ -84,113 +145,142 @@ class DaftarCatatanPage extends StatefulWidget {
 class _DaftarCatatanPageState extends State<DaftarCatatanPage> {
   String? _filter; // null = semua
 
+  // US-03: kata kunci pencarian judul
+  final TextEditingController _cari = TextEditingController();
+  String _kataKunci = "";
+
+  // US-05: mode urutan daftar
+  String _urutan = pilihanUrutan.first; // "Terbaru"
+
+  @override
+  void dispose() {
+    _cari.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(
-      title: const Text("Daftar Catatan"),
-      backgroundColor: _teal,
-      foregroundColor: Colors.white,
-      actions: const [
-        Padding(
-          padding: EdgeInsets.only(right: 12),
-          child: Center(child: _TotalCatatan()),
+        appBar: AppBar(
+          title: const Text("Daftar Catatan"),
+          backgroundColor: _teal,
+          foregroundColor: Colors.white,
+          actions: const [
+            Padding(
+              padding: EdgeInsets.only(right: 12),
+              child: Center(child: _TotalCatatan()),
+            ),
+          ],
         ),
-      ],
-    ),
-    body: Consumer<CatatanViewModel>(builder: (context, vm, _) {
-      if (vm.isLoading) {
-        return const Center(child: CircularProgressIndicator());
-      }
-      if (vm.error != null) {
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline_rounded,
-                    size: 56, color: Color(0xFFE57373)),
-                const SizedBox(height: 16),
-                Text(
-                  vm.error!,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
+        body: Consumer<CatatanViewModel>(builder: (context, vm, _) {
+          if (vm.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (vm.error != null) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.error_outline_rounded,
+                        size: 56, color: Color(0xFFE57373)),
+                    const SizedBox(height: 16),
+                    Text(
+                      vm.error!,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: vm.muatCatatan,
+                      child: const Text("Coba lagi"),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 16),
-                OutlinedButton(
-                  onPressed: vm.muatCatatan,
-                  child: const Text("Coba lagi"),
+              ),
+            );
+          }
+          if (vm.catatan.isEmpty) {
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(32),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.note_add_outlined,
+                        size: 56, color: Color(0xFFB2DFDB)),
+                    SizedBox(height: 16),
+                    Text(
+                      "Belum ada catatan. Tekan + untuk menambah catatan.",
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        );
-      }
-      if (vm.catatan.isEmpty) {
-        return const Center(
-          child: Padding(
-            padding: EdgeInsets.all(32),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.note_add_outlined,
-                    size: 56, color: Color(0xFFB2DFDB)),
-                SizedBox(height: 16),
-                Text(
-                  "Belum ada catatan. Tekan + untuk menambah catatan.",
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-      return ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 90),
-        children: [
-          // Filter chip per mata kuliah — scroll horizontal
-          SizedBox(
-            height: 52,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              children: [
-                _chip("Semua", null, _teal),
-                ...semuaMataKuliah.map((mk) {
-                  return _chip(mk.nama, mk.nama, mk.warna);
-                }),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          // Kelompok per mata kuliah
-          ...kelompokByMK(vm.catatan, _filter).map(
-                (entry) => Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _sectionHeader(entry.key, entry.value.length),
-                ...entry.value.map((catatan) {
-                  return _catatanCard(
-                      catatan,
-                          () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              DetailCatatanPage(id: catatan.id!),
+              ),
+            );
+          }
+          final hasilCari = cariCatatanByJudul(vm.catatan, _kataKunci);
+          final kelompok = kelompokByMK(hasilCari, _filter)
+              .map((e) => MapEntry(e.key, urutkanCatatan(e.value, _urutan)))
+              .toList();
+
+          return Column(
+            children: [
+              _kolomCari(),
+              _barisUrutan(),
+              Expanded(
+                child: ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 90),
+                  children: [
+                    // Filter chip per mata kuliah — scroll horizontal
+                    SizedBox(
+                      height: 52,
+                      child: ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: [
+                          _chip("Semua", null, _teal),
+                          ...semuaMataKuliah.map((mk) {
+                            return _chip(mk.nama, mk.nama, mk.warna);
+                          }),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Kelompok per mata kuliah (sudah terfilter pencarian)
+                    if (kelompok.isEmpty)
+                      _pesanKosong()
+                    else
+                      ...kelompok.map(
+                        (entry) => Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _sectionHeader(entry.key, entry.value.length),
+                            ...entry.value.map((catatan) {
+                              return _catatanCard(
+                                  catatan,
+                                  () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              DetailCatatanPage(id: catatan.id!),
+                                        ),
+                                      ));
+                            }),
+                          ],
                         ),
-                      ));
-                }),
-              ],
-            ),
-          ),
-        ],
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        }),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: _bukaFormTambah,
+          icon: const Icon(Icons.add),
+          label: const Text("Tambah"),
+        ),
       );
-    }),
-    floatingActionButton: FloatingActionButton.extended(
-      onPressed: _bukaFormTambah,
-      icon: const Icon(Icons.add),
-      label: const Text("Tambah"),
-    ),
-  );
 
   /// M1-T3: setelah form tersimpan, tampilkan SnackBar sukses.
   /// Card baru otomatis muncul karena ViewModel memanggil muatCatatan()
@@ -209,6 +299,166 @@ class _DaftarCatatanPageState extends State<DaftarCatatanPage> {
           backgroundColor: _tealDark,
         ),
       );
+  }
+
+  /// US-05: tombol pemilih urutan, membuka bottom sheet berisi 4 pilihan.
+  Widget _barisUrutan() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: _pilihUrutan,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+            decoration: BoxDecoration(
+              color: _teal.withValues(alpha: 0.10),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: _teal.withValues(alpha: 0.35)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.sort, size: 16, color: _tealDark),
+                const SizedBox(width: 6),
+                Text(
+                  "Urutan: $_urutan",
+                  style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                      color: _tealDark),
+                ),
+                const Icon(Icons.expand_more, size: 16, color: _tealDark),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pilihUrutan() async {
+    final dipilih = await showModalBottomSheet<String>(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 18, 20, 6),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Urutkan catatan",
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+            ...pilihanUrutan.map(
+              (p) => ListTile(
+                leading: Icon(
+                  p == _urutan
+                      ? Icons.radio_button_checked
+                      : Icons.radio_button_off,
+                  size: 20,
+                  color: _tealDark,
+                ),
+                title: Text(
+                  p,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight:
+                        p == _urutan ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+                onTap: () => Navigator.pop(ctx, p),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || dipilih == null) return;
+    setState(() => _urutan = dipilih);
+  }
+
+  /// US-03: kolom pencarian judul. Selalu terlihat (tidak ikut ter-scroll),
+  /// supaya pengguna bisa menghapus kata kunci tanpa menggulir ke atas.
+  Widget _kolomCari() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+      child: TextField(
+        controller: _cari,
+        textInputAction: TextInputAction.search,
+        onChanged: (v) => setState(() => _kataKunci = v),
+        decoration: InputDecoration(
+          hintText: "Cari judul catatan…",
+          hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF90A4AE)),
+          prefixIcon: const Icon(Icons.search, size: 20, color: _teal),
+          suffixIcon: _kataKunci.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: "Hapus pencarian",
+                  icon: const Icon(Icons.close, size: 18),
+                  onPressed: () {
+                    _cari.clear();
+                    setState(() => _kataKunci = "");
+                  },
+                ),
+          isDense: true,
+          filled: true,
+          fillColor: Colors.white,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: BorderSide(color: _teal.withValues(alpha: 0.35)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(14),
+            borderSide: const BorderSide(color: _teal, width: 1.6),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Ditampilkan bila kombinasi pencarian + filter tidak menghasilkan apa pun.
+  Widget _pesanKosong() {
+    final adaKunci = _kataKunci.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Column(
+        children: [
+          Icon(adaKunci ? Icons.search_off_rounded : Icons.filter_alt_off_rounded,
+              size: 56, color: const Color(0xFFB2DFDB)),
+          const SizedBox(height: 16),
+          Text(
+            adaKunci
+                ? "Tidak ada catatan dengan judul mengandung \"${_kataKunci.trim()}\"."
+                : "Tidak ada catatan pada kategori ini.",
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontSize: 14, color: Color(0xFF546E7A)),
+          ),
+          if (adaKunci) ...[
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () {
+                _cari.clear();
+                setState(() => _kataKunci = "");
+              },
+              icon: const Icon(Icons.refresh, size: 18),
+              label: const Text("Hapus pencarian"),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _chip(String label, String? nilai, Color warna) {
